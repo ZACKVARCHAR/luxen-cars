@@ -1,0 +1,231 @@
+@import "tailwindcss";
+
+:root {
+  --luxen-red: #e10600;
+  --luxen-red-dark: #c40500;
+  --luxen-red-soft: #ff1f14;
+  --luxen-black: #0b0d12;
+  --luxen-ink: #111111;
+  --luxen-steel: #777777;
+  --luxen-silver: #c5c9d1;
+  --luxen-mist: #f6f7f9;
+  --luxen-white: #ffffff;
+  --background: #ffffff;
+  --foreground: #111111;
+  --radius: 12px;
+  --shadow-soft: 0 18px 50px rgba(10, 10, 10, 0.12);
+  --shadow-card: 0 10px 30px rgba(0, 0, 0, 0.06);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-luxen-red: var(--luxen-red);
+  --color-luxen-red-dark: var(--luxen-red-dark);
+  --color-luxen-black: var(--luxen-black);
+  --color-luxen-ink: var(--luxen-ink);
+  --color-luxen-steel: var(--luxen-steel);
+  --color-luxen-silver: var(--luxen-silver);
+  --color-luxen-mist: var(--luxen-mist);
+  --font-sans: var(--font-manrope);
+  --font-display: var(--font-outfit);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-manrope), system-ui, sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+html.lang-ar body,
+html.lang-ar h1,
+html.lang-ar h2,
+html.lang-ar h3,
+html.lang-ar .font-display {
+  font-family: var(--font-arabic), var(--font-manrope), system-ui, sans-serif;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-outfit), var(--font-manrope), system-ui, sans-serif;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--luxen-red) 25%, white);
+}
+
+.container-luxen {
+  width: min(1180px, calc(100% - 2rem));
+  margin-inline: auto;
+}
+
+.field {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: white;
+  padding: 0.75rem 0.85rem;
+  font-size: 0.875rem;
+  outline: none;
+}
+
+.field:focus {
+  box-shadow: 0 0 0 3px rgba(225, 6, 0, 0.15);
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow: var(--shadow-soft);
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.5rem;
+  background: var(--luxen-red);
+  color: white;
+  font-weight: 700;
+  padding: 0.85rem 1.35rem;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, filter 0.25s ease;
+  box-shadow: 0 10px 28px rgba(225, 6, 0, 0.28);
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(18, 21, 28, 0.12);
+  background: white;
+  color: var(--luxen-ink);
+  font-weight: 600;
+  padding: 0.85rem 1.35rem;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.btn-ghost:hover {
+  border-color: rgba(225, 6, 0, 0.45);
+  transform: translateY(-1px);
+}
+
+.section-title {
+  font-size: clamp(1.75rem, 3vw, 2.4rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--luxen-ink);
+}
+
+.section-subtitle {
+  margin-top: 0.65rem;
+  color: var(--luxen-steel);
+  max-width: 42rem;
+  line-height: 1.6;
+}
+
+.platform-glow {
+  background:
+    radial-gradient(circle at 50% 40%, rgba(225, 6, 0, 0.35), transparent 42%),
+    radial-gradient(circle at 50% 70%, rgba(255, 255, 255, 0.08), transparent 55%);
+}
+
+.hero-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* —— Mobile polish —— */
+@media (max-width: 640px) {
+  .container-luxen {
+    width: min(100% - 1.25rem, 1180px);
+  }
+
+  .btn-primary,
+  .btn-ghost {
+    width: 100%;
+    min-height: 48px;
+  }
+}
+
+/* —— Print invoice —— */
+@media print {
+  @page {
+    margin: 12mm;
+    size: A4;
+  }
+
+  html,
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .invoice-sheet,
+  .invoice-sheet * {
+    visibility: visible !important;
+  }
+
+  .invoice-sheet {
+    position: absolute;
+    inset: 0;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .no-print,
+  header,
+  footer,
+  [class*="HelpAssistant"],
+  .fixed {
+    display: none !important;
+    visibility: hidden !important;
+  }
+}

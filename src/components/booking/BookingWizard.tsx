@@ -20,7 +20,8 @@ import type {
   SearchParams,
   Vehicle,
 } from "@/lib/types";
-import { formatMad, formatMadPrecise, todayPlus } from "@/lib/utils";
+import { formatMad, formatMadPrecise, rentalDays, todayPlus } from "@/lib/utils";
+import { BOOKING_OPTIONS } from "@/lib/data/vehicles";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
@@ -127,10 +128,59 @@ export function BookingWizard() {
     }
   }
 
+  function buildLocalQuote(vehicle: Vehicle): Quote {
+    const days = rentalDays(search.startDate, search.startTime, search.endDate, search.endTime);
+    const optionsTotal = BOOKING_OPTIONS.filter((o) => optionIds.includes(o.id)).reduce(
+      (sum, o) => sum + (o.pricePerDay === 0 && o.id === "full-tank" ? 250 : o.pricePerDay * days),
+      0,
+    );
+    const subtotal = vehicle.dailyRate * days;
+    const discount = days >= 7 ? Math.round(subtotal * 0.08) : 0;
+    return {
+      vehicleId: vehicle.id,
+      days,
+      dailyRate: vehicle.dailyRate,
+      optionsTotal,
+      discount,
+      deposit: vehicle.deposit,
+      subtotal,
+      total: subtotal + optionsTotal - discount,
+      currency: "MAD",
+      lines: [
+        { label: `${days} jour${days > 1 ? "s" : ""} × ${vehicle.dailyRate} MAD`, amount: subtotal },
+        ...(optionsTotal ? [{ label: "Options", amount: optionsTotal }] : []),
+        ...(discount ? [{ label: "Remise", amount: -discount }] : []),
+      ],
+      isEstimate: true,
+    };
+  }
+
   useEffect(() => {
-    if (!selectedId) return;
-    api.getQuote(selectedId, search, optionIds).then(setQuote).catch(() => setQuote(null));
-  }, [selectedId, search, optionIds]);
+    if (!selectedId) {
+      setQuote(null);
+      return;
+    }
+    const vehicle = vehicles.find((v) => v.id === selectedId);
+    let cancelled = false;
+    api
+      .getQuote(selectedId, search, optionIds)
+      .then((q) => {
+        if (!cancelled) {
+          setQuote(q);
+        }
+      })
+      .catch(() => {
+        if (!cancelled && vehicle) {
+          setQuote(buildLocalQuote(vehicle));
+        } else if (!cancelled) {
+          setQuote(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, search, optionIds, vehicles]);
 
   async function confirm() {
     const customer = await form.trigger().then((ok) => (ok ? form.getValues() : null));
@@ -489,95 +539,134 @@ export function BookingWizard() {
             </div>
           )}
 
-          {step === 3 && selected && quote && (
+          {step === 3 && (
             <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
               <div className="space-y-5 rounded-[24px] border border-black/5 bg-white p-5 shadow-[0_14px_40px_rgba(0,0,0,0.06)]">
                 <h3 className="font-display text-xl font-bold text-[#111]">{t.booking.summary}</h3>
-                <p className="text-sm text-[#666]">
-                  {selected.brand} {selected.model} · {search.city} · {search.startDate}{" "}
-                  {search.startTime} → {search.endDate} {search.endTime}
-                </p>
-                <p className="text-sm text-[#444]">
-                  {form.getValues("firstName")} {form.getValues("lastName")} ·{" "}
-                  {form.getValues("email")} · {form.getValues("phone")}
-                </p>
 
-                <div>
-                  <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-[#777]">
-                    {t.booking.payMode}
-                  </h4>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {PAYMENT_METHODS.map((method) => {
-                      const active = paymentMethod === method.code;
-                      return (
-                        <button
-                          key={method.code}
-                          type="button"
-                          onClick={() => setPaymentMethod(method.code)}
-                          className={`rounded-2xl border px-3 py-3 text-left transition ${
-                            active
-                              ? "border-[#e10600] bg-[#fff5f4] shadow-[0_8px_20px_rgba(225,6,0,0.12)]"
-                              : "border-[#e8e8e8] bg-white hover:border-[#e10600]/40"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-sm font-bold text-[#111]">
-                              {t.payments[method.code]}
-                            </span>
-                            {active && (
-                              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#e10600] text-white">
-                                <Check className="h-3 w-3" strokeWidth={3} />
-                              </span>
-                            )}
-                          </div>
-                          <p className="mt-1 text-xs leading-relaxed text-[#777]">
-                            {
-                              t.payments[
-                                `${method.code}_desc` as
-                                  | "TPA_desc"
-                                  | "CASH_desc"
-                                  | "CHEQUE_desc"
-                                  | "VIREMENT_desc"
-                              ]
-                            }
-                          </p>
-                        </button>
-                      );
-                    })}
+                {!selected ? (
+                  <div className="space-y-4">
+                    <p className="rounded-xl bg-[#f3f4f6] px-3 py-3 text-sm text-[#666]">
+                      {t.booking.empty}
+                    </p>
+                    <Button variant="ghost" onClick={() => setStep(1)}>
+                      {t.booking.back}
+                    </Button>
                   </div>
-                </div>
+                ) : !quote ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 rounded-xl bg-[#fff5f4] px-3 py-3 text-sm text-[#e10600]">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      {t.booking.quoteEmpty}
+                    </div>
+                    <div className="flex flex-col gap-3 sm:flex-row">
+                      <Button variant="ghost" onClick={() => setStep(2)} className="w-full sm:w-auto">
+                        {t.booking.back}
+                      </Button>
+                      <Button
+                        className="w-full sm:w-auto"
+                        onClick={() => {
+                          if (!selected) return;
+                          setError("");
+                          setQuote(buildLocalQuote(selected));
+                          api.getQuote(selected.id, search, optionIds).then(setQuote).catch(() => {
+                            /* local quote already shown */
+                          });
+                        }}
+                      >
+                        {t.booking.continue}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm text-[#666]">
+                      {selected.brand} {selected.model} · {search.city} · {search.startDate}{" "}
+                      {search.startTime} → {search.endDate} {search.endTime}
+                    </p>
+                    <p className="text-sm text-[#444]">
+                      {form.getValues("firstName")} {form.getValues("lastName")} ·{" "}
+                      {form.getValues("email")} · {form.getValues("phone")}
+                    </p>
 
-                {paymentMethod === "VIREMENT" && (
-                  <Field label={t.booking.bank}>
-                    <select
-                      className="field"
-                      value={paymentBank}
-                      onChange={(e) => setPaymentBank(e.target.value)}
-                    >
-                      {MOROCCO_BANKS.map((bank) => (
-                        <option key={bank} value={bank}>
-                          {bank === "Autre banque" ? t.payments.otherBank : bank}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
+                    <div>
+                      <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-[#777]">
+                        {t.booking.payMode}
+                      </h4>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {PAYMENT_METHODS.map((method) => {
+                          const active = paymentMethod === method.code;
+                          return (
+                            <button
+                              key={method.code}
+                              type="button"
+                              onClick={() => setPaymentMethod(method.code)}
+                              className={`rounded-2xl border px-3 py-3 text-left transition ${
+                                active
+                                  ? "border-[#e10600] bg-[#fff5f4] shadow-[0_8px_20px_rgba(225,6,0,0.12)]"
+                                  : "border-[#e8e8e8] bg-white hover:border-[#e10600]/40"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-sm font-bold text-[#111]">
+                                  {t.payments[method.code]}
+                                </span>
+                                {active && (
+                                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#e10600] text-white">
+                                    <Check className="h-3 w-3" strokeWidth={3} />
+                                  </span>
+                                )}
+                              </div>
+                              <p className="mt-1 text-xs leading-relaxed text-[#777]">
+                                {
+                                  t.payments[
+                                    `${method.code}_desc` as
+                                      | "TPA_desc"
+                                      | "CASH_desc"
+                                      | "CHEQUE_desc"
+                                      | "VIREMENT_desc"
+                                  ]
+                                }
+                              </p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {paymentMethod === "VIREMENT" && (
+                      <Field label={t.booking.bank}>
+                        <select
+                          className="field"
+                          value={paymentBank}
+                          onChange={(e) => setPaymentBank(e.target.value)}
+                        >
+                          {MOROCCO_BANKS.map((bank) => (
+                            <option key={bank} value={bank}>
+                              {bank === "Autre banque" ? t.payments.otherBank : bank}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                    )}
+
+                    <p className="rounded-xl bg-[#fff5f4] px-3 py-2 text-sm text-[#444]">
+                      {t.booking.payChosen}{" "}
+                      <strong>{translatePayment(t, paymentMethod, paymentBank)}</strong>.{" "}
+                      {t.booking.deposit} {formatMad(quote.deposit, locale)}. {t.booking.agency}{" "}
+                      {t.site.city}.
+                    </p>
+                    <div className="flex flex-col gap-3 sm:flex-row">
+                      <Button variant="ghost" onClick={() => setStep(2)} className="w-full sm:w-auto">
+                        {t.booking.back}
+                      </Button>
+                      <Button onClick={confirm} disabled={submitting} className="w-full sm:w-auto">
+                        {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        {t.booking.confirm}
+                      </Button>
+                    </div>
+                  </>
                 )}
-
-                <p className="rounded-xl bg-[#fff5f4] px-3 py-2 text-sm text-[#444]">
-                  {t.booking.payChosen}{" "}
-                  <strong>{translatePayment(t, paymentMethod, paymentBank)}</strong>.{" "}
-                  {t.booking.deposit} {formatMad(quote.deposit, locale)}. {t.booking.agency}{" "}
-                  {t.site.city}.
-                </p>
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <Button variant="ghost" onClick={() => setStep(2)} className="w-full sm:w-auto">
-                    {t.booking.back}
-                  </Button>
-                  <Button onClick={confirm} disabled={submitting} className="w-full sm:w-auto">
-                    {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                    {t.booking.confirm}
-                  </Button>
-                </div>
               </div>
               <QuotePanel quote={quote} vehicle={selected} t={t} locale={locale} />
             </div>

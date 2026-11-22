@@ -90,36 +90,46 @@ function toIso(date: string, time: string) {
 function mapPublicVehicle(raw: Record<string, unknown>): Vehicle {
   const brand = String(raw.brand || "Dacia") as Vehicle["brand"];
   const model = String(raw.model || "");
-  const local = VEHICLES.find(
-    (v) => v.brand === brand && v.model.toLowerCase().includes(model.toLowerCase()),
-  );
+  const slug = String(raw.slug || "");
+  const local =
+    VEHICLES.find((v) => slug && v.slug === slug) ||
+    VEHICLES.find(
+      (v) => v.brand === brand && v.model.toLowerCase().includes(model.toLowerCase()),
+    );
+  const apiFeatures = Array.isArray(raw.features)
+    ? (raw.features as string[])
+    : local?.features || [];
+  const image =
+    (typeof raw.imageUrl === "string" && raw.imageUrl) ||
+    local?.image ||
+    "/vehicles/peugeot-208.png";
   return {
     id: String(raw.id),
-    slug: local?.slug || `${brand}-${model}`.toLowerCase().replace(/\s+/g, "-"),
+    slug: slug || local?.slug || `${brand}-${model}`.toLowerCase().replace(/\s+/g, "-"),
     brand,
     model,
     category: (String(raw.category || local?.category || "Citadine") as Vehicle["category"]),
     dailyRate: Number(raw.dailyRate || 0),
     currency: "MAD",
-    deposit: local?.deposit || 3000,
-    seats: local?.seats || 5,
-    bags: local?.bags || 2,
+    deposit: Number(raw.deposit ?? local?.deposit ?? 3000),
+    seats: Number(raw.seats ?? local?.seats ?? 5),
+    bags: Number(raw.bags ?? local?.bags ?? 2),
     transmission: (String(raw.transmission || local?.transmission || "Manuelle") as Vehicle["transmission"]),
     fuel: (String(raw.fuel || local?.fuel || "Essence") as Vehicle["fuel"]),
-    airConditioning: local?.airConditioning ?? true,
-    features: local?.features || [],
+    airConditioning: Boolean(raw.airConditioning ?? local?.airConditioning ?? true),
+    features: apiFeatures,
     status:
       String(raw.status) === "AVAILABLE"
         ? "AVAILABLE"
-        : String(raw.status) === "MAINTENANCE"
+        : String(raw.status) === "MAINTENANCE" || String(raw.status) === "IMMOBILIZED"
           ? "UNAVAILABLE"
           : "LIMITED",
-    image: local?.image || "/vehicles/peugeot-208.png",
-    gallery: local?.gallery || [local?.image || "/vehicles/peugeot-208.png"],
+    image,
+    gallery: local?.gallery || [image],
     colors: local?.colors || ["Blanc"],
     has3d: false,
     description: local?.description || `${brand} ${model}`,
-    placeholder: true,
+    placeholder: !raw.imageUrl && !local,
   };
 }
 
@@ -179,10 +189,12 @@ export const api = {
 
   async getVehicleBySlug(slug: string) {
     const local = VEHICLES.find((v) => v.slug === slug) ?? null;
-    if (USE_LIVE && local) {
+    if (USE_LIVE) {
       try {
-        const list = await this.getVehicles({ brand: local.brand });
-        return list.find((v) => v.model.toLowerCase() === local.model.toLowerCase()) || local;
+        const remote = await liveFetch<Record<string, unknown>>(
+          `/api/v1/public/vehicles/by-slug/${encodeURIComponent(slug)}`,
+        );
+        return mapPublicVehicle(remote);
       } catch {
         return local;
       }
@@ -376,6 +388,8 @@ export const api = {
           endAt: string;
           pickupLocation: string;
           returnLocation: string;
+          paymentMethod?: string;
+          paymentBank?: string | null;
         }>(
           `/api/v1/public/reservations/${encodeURIComponent(reference)}?contact=${encodeURIComponent(emailOrPhone)}`,
         );
@@ -412,8 +426,8 @@ export const api = {
             category: "",
           },
           customer: remote.customer,
-          paymentMethod: "CASH",
-          paymentBank: null,
+          paymentMethod: (remote.paymentMethod as BookingConfirmation["paymentMethod"]) || "CASH",
+          paymentBank: remote.paymentBank || null,
           createdAt: new Date().toISOString(),
         } satisfies BookingConfirmation;
       } catch {

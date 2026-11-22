@@ -163,7 +163,7 @@ export function BookingWizard() {
     const vehicle = vehicles.find((v) => v.id === selectedId);
     let cancelled = false;
     api
-      .getQuote(selectedId, search, optionIds)
+      .getQuote(selectedId, search, optionIds, vehicle)
       .then((q) => {
         if (!cancelled) {
           setQuote(q);
@@ -195,6 +195,7 @@ export function BookingWizard() {
       const confirmation = await api.createBooking({
         search,
         vehicleId: selectedId,
+        vehicle: selected,
         optionIds,
         customer,
         paymentMethod,

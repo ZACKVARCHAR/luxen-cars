@@ -25,6 +25,7 @@ export interface VehicleFilters {
   availability?: AvailabilityStatus | "";
   maxPrice?: number;
   query?: string;
+  city?: string;
 }
 
 function mockDelay<T>(value: T, ms = 280): Promise<T> {
@@ -173,6 +174,7 @@ export const api = {
     if (USE_LIVE) {
       try {
         const params = new URLSearchParams();
+        if (filters.city) params.set("city", filters.city);
         if (filters.brand && filters.brand !== "all") params.set("brand", filters.brand);
         if (filters.category) params.set("category", filters.category);
         const qs = params.toString();
@@ -187,12 +189,37 @@ export const api = {
     return mockDelay(filterVehicles(VEHICLES, filters));
   },
 
-  async getVehicleBySlug(slug: string) {
+  async getVehicleById(id: string, city?: string) {
+    const local = VEHICLES.find((v) => v.id === id) ?? null;
+    if (USE_LIVE) {
+      try {
+        const params = new URLSearchParams();
+        if (city) params.set("city", city);
+        const qs = params.toString();
+        const remote = await liveFetch<Record<string, unknown>>(
+          `/api/v1/public/vehicles/${encodeURIComponent(id)}${qs ? `?${qs}` : ""}`,
+        );
+        return mapPublicVehicle(remote);
+      } catch {
+        if (city) {
+          const list = await this.getVehicles({ city });
+          return list.find((v) => v.id === id) || local;
+        }
+        return local;
+      }
+    }
+    return mockDelay(local);
+  },
+
+  async getVehicleBySlug(slug: string, city?: string) {
     const local = VEHICLES.find((v) => v.slug === slug) ?? null;
     if (USE_LIVE) {
       try {
+        const params = new URLSearchParams();
+        if (city) params.set("city", city);
+        const qs = params.toString();
         const remote = await liveFetch<Record<string, unknown>>(
-          `/api/v1/public/vehicles/by-slug/${encodeURIComponent(slug)}`,
+          `/api/v1/public/vehicles/by-slug/${encodeURIComponent(slug)}${qs ? `?${qs}` : ""}`,
         );
         return mapPublicVehicle(remote);
       } catch {
@@ -200,6 +227,16 @@ export const api = {
       }
     }
     return mockDelay(local);
+  },
+
+  async resolveVehicle(vehicleId: string, search: SearchParams, known?: Vehicle | null) {
+    if (known && known.id === vehicleId) return known;
+    const local = VEHICLES.find((v) => v.id === vehicleId);
+    if (local) return local;
+    const byId = await this.getVehicleById(vehicleId, search.city);
+    if (byId) return byId;
+    const list = await this.getVehicles({ city: search.city });
+    return list.find((v) => v.id === vehicleId) || null;
   },
 
   async searchAvailability(search: SearchParams) {
@@ -229,10 +266,8 @@ export const api = {
     return list.filter((v) => v.status !== "UNAVAILABLE");
   },
 
-  async getQuote(vehicleId: string, search: SearchParams, optionIds: string[]) {
-    const vehicle =
-      VEHICLES.find((v) => v.id === vehicleId) ||
-      (await this.getVehicles()).find((v) => v.id === vehicleId);
+  async getQuote(vehicleId: string, search: SearchParams, optionIds: string[], known?: Vehicle | null) {
+    const vehicle = await this.resolveVehicle(vehicleId, search, known);
     if (!vehicle) throw new Error("Véhicule introuvable");
 
     const optionsTotal = BOOKING_OPTIONS.filter((o) => optionIds.includes(o.id)).reduce(
@@ -299,11 +334,9 @@ export const api = {
     if (!draft.vehicleId || !draft.customer) {
       throw new Error("Réservation incomplète");
     }
-    const vehicle =
-      VEHICLES.find((v) => v.id === draft.vehicleId) ||
-      (await this.getVehicles()).find((v) => v.id === draft.vehicleId);
+    const vehicle = await this.resolveVehicle(draft.vehicleId, draft.search, draft.vehicle);
     if (!vehicle) throw new Error("Véhicule introuvable");
-    const quote = await this.getQuote(draft.vehicleId, draft.search, draft.optionIds);
+    const quote = await this.getQuote(draft.vehicleId, draft.search, draft.optionIds, vehicle);
 
     if (USE_LIVE) {
       const remote = await liveFetch<{

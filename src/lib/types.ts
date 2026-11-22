@@ -98,6 +98,7 @@ export type PaymentMethod = "TPA" | "CASH" | "CHEQUE" | "VIREMENT";
 export interface BookingDraft {
   search: SearchParams;
   vehicleId: string | null;
+  vehicle?: Vehicle | null;
   optionIds: string[];
   customer: CustomerInfo | null;
   paymentMethod: PaymentMethod;
